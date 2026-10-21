@@ -82,7 +82,7 @@ object Nombrador {
     fun asignar(fotos: List<Foto>): List<Foto> {
         val usados = HashSet<String>()
         return fotos
-            .sortedWith(compareBy({ it.fecha == null }, { it.fecha?.format(formato) }, { it.nombreOriginal }))
+            .sortedWith(compareBy<Foto>({ it.fecha == null }, { it.fecha?.format(formato) }, { it.nombreOriginal }))
             .map { f ->
                 val base = f.fecha?.let { "IMG_" + it.format(formato) } ?: ("SIN_FECHA_" + f.nombreOriginal.substringBeforeLast('.'))
                 var nombre = "$base.${f.extension}"
