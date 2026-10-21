@@ -79,15 +79,17 @@ object LectorFecha {
 object Nombrador {
     private val formato = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss")
 
-    fun asignar(fotos: List<Foto>): List<Foto> {
+    /** Con [comprimir] todas salen como .jpg, porque se recodifican a JPEG. */
+    fun asignar(fotos: List<Foto>, comprimir: Boolean): List<Foto> {
         val usados = HashSet<String>()
         return fotos
             .sortedWith(compareBy<Foto>({ it.fecha == null }, { it.fecha?.format(formato) }, { it.nombreOriginal }))
             .map { f ->
                 val base = f.fecha?.let { "IMG_" + it.format(formato) } ?: ("SIN_FECHA_" + f.nombreOriginal.substringBeforeLast('.'))
-                var nombre = "$base.${f.extension}"
+                val ext = if (comprimir) "jpg" else f.extension
+                var nombre = "$base.$ext"
                 var n = 1
-                while (!usados.add(nombre.lowercase())) nombre = "${base}_${n++}.${f.extension}"
+                while (!usados.add(nombre.lowercase())) nombre = "${base}_${n++}.$ext"
                 f.copy(nombreNuevo = nombre)
             }
     }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +48,7 @@ class Modelo(app: Application) : AndroidViewModel(app) {
     var ocupado by mutableStateOf(false); private set
     var avance by mutableStateOf(0); private set
     var mensaje by mutableStateOf<String?>(null)
+    var comprimir by mutableStateOf(true); private set
     private var tarea: Job? = null
 
     fun elegidas(uris: List<Uri>) {
@@ -57,7 +59,7 @@ class Modelo(app: Application) : AndroidViewModel(app) {
             ocupado = true; avance = 0
             val ctx = getApplication<Application>()
             fotos = withContext(Dispatchers.IO) {
-                Nombrador.asignar(uris.distinct().map { LectorFecha.leer(ctx, it) })
+                Nombrador.asignar(uris.distinct().map { LectorFecha.leer(ctx, it) }, comprimir)
             }
             ocupado = false
             val sin = fotos.count { it.origen != Origen.EXIF }
@@ -70,7 +72,7 @@ class Modelo(app: Application) : AndroidViewModel(app) {
         tarea = viewModelScope.launch {
             ocupado = true; avance = 0
             try {
-                zip = Empaquetador.crearZip(getApplication<Application>(), fotos) { avance = it }
+                zip = Empaquetador.crearZip(getApplication<Application>(), fotos, comprimir) { avance = it }
                 mensaje = "ZIP listo: ${zip!!.name} (${tamano(zip!!.length())})"
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -89,6 +91,13 @@ class Modelo(app: Application) : AndroidViewModel(app) {
                 .fold({ "ZIP guardado" }, { "No se pudo guardar: ${it.message}" })
             ocupado = false
         }
+    }
+
+    fun cambiarCompresion(valor: Boolean) {
+        if (ocupado) return
+        comprimir = valor
+        zip = null
+        fotos = Nombrador.asignar(fotos, valor)
     }
 
     fun limpiar() {
@@ -128,6 +137,12 @@ fun Pantalla(m: Modelo = viewModel()) {
                 if (m.fotos.isNotEmpty()) OutlinedButton(onClick = m::limpiar) { Text("Limpiar") }
             }
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = m.comprimir, onCheckedChange = m::cambiarCompresion, enabled = !m.ocupado)
+                Spacer(Modifier.width(8.dp))
+                Text("Comprimir fotos (JPEG ${Compresor.CALIDAD}%)")
+            }
+
             if (m.fotos.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = m::empaquetar, enabled = !m.ocupado, modifier = Modifier.fillMaxWidth()) {
@@ -151,7 +166,7 @@ fun Pantalla(m: Modelo = viewModel()) {
                 Spacer(Modifier.height(12.dp))
                 if (m.avance > 0 && m.fotos.isNotEmpty()) {
                     LinearProgressIndicator(progress = { m.avance / m.fotos.size.toFloat() }, modifier = Modifier.fillMaxWidth())
-                    Text("Comprimiendo ${m.avance} de ${m.fotos.size}", style = MaterialTheme.typography.bodySmall)
+                    Text((if (m.comprimir) "Comprimiendo" else "Empaquetando") + " ${m.avance} de ${m.fotos.size}", style = MaterialTheme.typography.bodySmall)
                 } else {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }

@@ -16,10 +16,11 @@ import java.util.zip.ZipOutputStream
 object Empaquetador {
     fun carpeta(ctx: Context) = File(ctx.cacheDir, "zip").apply { mkdirs() }
 
-    suspend fun crearZip(ctx: Context, fotos: List<Foto>, progreso: (Int) -> Unit): File = withContext(Dispatchers.IO) {
+    suspend fun crearZip(ctx: Context, fotos: List<Foto>, comprimir: Boolean, progreso: (Int) -> Unit): File = withContext(Dispatchers.IO) {
         carpeta(ctx).listFiles()?.forEach { it.delete() }
         val nombre = "Fotos_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss")) + ".zip"
         val destino = File(carpeta(ctx), nombre)
+        val temporal = File(ctx.cacheDir, "temporal.jpg")
         try {
             ZipOutputStream(destino.outputStream().buffered(1 shl 16)).use { zip ->
                 zip.setLevel(Deflater.NO_COMPRESSION) // JPG/HEIC ya vienen comprimidos: así es mucho más rápido
@@ -28,8 +29,12 @@ object Empaquetador {
                     zip.putNextEntry(ZipEntry(f.nombreNuevo).apply {
                         f.fecha?.let { time = it.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }
                     })
-                    ctx.contentResolver.openInputStream(f.uri)?.use { it.copyTo(zip, 1 shl 16) }
-                        ?: error("No se pudo leer ${f.nombreOriginal}")
+                    if (comprimir && Compresor.comprimir(ctx, f, temporal)) {
+                        temporal.inputStream().use { it.copyTo(zip, 1 shl 16) }
+                    } else {
+                        ctx.contentResolver.openInputStream(f.uri)?.use { it.copyTo(zip, 1 shl 16) }
+                            ?: error("No se pudo leer ${f.nombreOriginal}")
+                    }
                     zip.closeEntry()
                     withContext(Dispatchers.Main) { progreso(i + 1) }
                 }
@@ -37,6 +42,8 @@ object Empaquetador {
         } catch (e: Throwable) {
             destino.delete()
             throw e
+        } finally {
+            temporal.delete()
         }
         destino
     }
